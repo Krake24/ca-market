@@ -5,8 +5,8 @@ Invite the bot to your discord: [Invite](https://discord.com/api/oauth2/authoriz
 
 ## Commands
 
-/pet offer 
+### /pet offer 
 Saves pets in a database of offered Pets along with the owners discord name
 
-/pet search
+### /pet search
 Sends a query against the database and returns pets that fit the query
