@@ -63,16 +63,16 @@ async def offer(inter, id: commands.Range[1, 22238]):
 
 @pet.sub_command(description="Remove listed pet")
 async def remove(inter, id: commands.Range[1, 22238]):
-    pet = next(filter(lambda d: d['pet_id'] == id, db['offers']), False)
-    if not pet:
+    offer = next(filter(lambda d: d['pet_id'] == id, db['offers']), False)
+    if not offer:
         return await inter.response.send_message("Error: Pet with ID " +
                                                  str(id) + " is not listed")
-    if not inter.user_id == pet['user_id']:
+    if not inter.user.id == offer['user_id']:
         return await inter.response.send_message("Error: Pet with ID " +
                                                  str(id) + " was listed by " +
-                                                 pet['user'] +
+                                                 offer['user'] +
                                                  ". You can't remove it.")
-    db['offers'].remove(pet)
+    db['offers'].remove(offer)
     return await inter.response.send_message("Pet with ID " + str(id) +
                                              " has been removed")
 
