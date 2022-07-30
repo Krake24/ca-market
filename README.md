@@ -6,7 +6,13 @@ Invite the bot to your discord: [Invite](https://discord.com/api/oauth2/authoriz
 ## Commands
 
 ### /pet offer 
-Saves pets in a database of offered Pets along with the owners discord name
+Saves pets in a database of offered pets along with the owners discord name
+
+### /pet remove
+Removes a pet in the database of offered pets
 
 ### /pet search
 Sends a query against the database and returns pets that fit the query
+
+### /pet show
+Shows the attributes of the pet with the given id
