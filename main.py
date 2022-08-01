@@ -25,6 +25,9 @@ all_pets = json.loads(f.read())
 if 'offers' not in db:
     db['offers'] = []
 
+if 'needs' not in db:
+    db['needs'] = []
+
 
 @bot.event
 async def on_ready():
@@ -61,8 +64,13 @@ async def offer(inter, id: commands.Range[1, 22238]):
     await inter.response.send_message("Pet with ID " + str(id) + " registered")
 
 
-@pet.sub_command(description="Remove listed pet")
-async def remove(inter, id: commands.Range[1, 22238]):
+@pet.sub_command_group()
+async def remove(inter):
+    pass
+
+
+@remove.sub_command(description="Remove listed pet", name="offer")
+async def remove_offer(inter, id: commands.Range[1, 22238]):
     offer = next(filter(lambda d: d['pet_id'] == id, db['offers']), False)
     if not offer:
         return await inter.response.send_message("Error: Pet with ID " +
@@ -122,8 +130,31 @@ async def search(inter, family: Family, house_banner: House_Banner,
             "More than 30 hits. Please narrow your search.")
     result = ""
     for pet in search_results:
-        result += pet['user'] + " offers pet id: " + str(pet['pet_id']) + "\n"
+        result += str(
+            pet['pet_id']
+        ) + " " + pet['House Banner'][0] + pet['Favorite Family'] + " " + pet[
+            'Family'] + " (" + pet['user'] + ")\n"
     await inter.response.send_message(result)
+
+
+@pet.sub_command(description="Register a need for a certain pet Type")
+async def need(inter, family: Family, house_banner: House_Banner,
+               favorite_family: Favorite_Family):
+    need = {}
+    need['user'] = str(inter.user)
+    need['user_id'] = inter.user.id
+
+    need['Family'] = family
+    need['House Banner'] = house_banner
+    need['Favorite Family'] = favorite_family
+    db['needs'].append(need)
+    await inter.response.send_message("Need registered")
+
+
+@remove.sub_command(description="Remove listed pet", name="need")
+async def remove_need(inter, family: Family, house_banner: House_Banner,
+                      favorite_family: Favorite_Family):
+    return await inter.response.send_message("Not yet implemented")
 
 
 @pet.sub_command(description="Show values of pet with given ID")

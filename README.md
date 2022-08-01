@@ -8,8 +8,14 @@ Invite the bot to your discord: [Invite](https://discord.com/api/oauth2/authoriz
 ### /pet offer 
 Saves pets in a database of offered pets along with the owners discord name
 
-### /pet remove
-Removes a pet in the database of offered pets
+### /pet remove offer
+Removes a pet from the database of offered pets
+
+### /pet need
+Registers a need for the given pet type
+
+### /pet remove need
+Removes a need from the database
 
 ### /pet search
 Sends a query against the database and returns pets that fit the query
