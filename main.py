@@ -6,6 +6,31 @@ from disnake.ext import commands
 from replit import db
 from flask import Flask
 
+
+def convertOfferKeys(old):
+    return {
+        "pet_id": old['pet_id'],
+        "user": old['user'],
+        "user_id": old['user_id'],
+        "family": old['Family'],
+        "house_banner": old['House Banner'],
+        "favorite_family": old['Favorite Family'],
+        "personality": old['Personality'],
+        "favorite_toy": old['Favorite Toy'],
+        "favorite_food": old['Favorite Food']
+    }
+
+
+def convertNeedKeys(old):
+    return {
+        "user": old['user'],
+        "user_id": old['user_id'],
+        "family": old['Family'],
+        "house_banner": old['House Banner'],
+        "favorite_family": old['Favorite Family']
+    }
+
+
 app = Flask(__name__)
 
 
@@ -14,10 +39,35 @@ def main():
     return 'alive'
 
 
+@app.route('/offers')
+def get_offers():
+    result = []
+    for offer in db['offers']:
+        result.append(convertOfferKeys(dict(offer)))
+    return json.dumps(result, ensure_ascii=False).encode('utf8')
+
+
+@app.route('/needs')
+def get_needs():
+    result = []
+    for need in db['needs']:
+        result.append(convertNeedKeys(dict(need)))
+    return json.dumps(result, ensure_ascii=False).encode('utf8')
+
+
+@app.after_request
+def apply_caching(response):
+    response.headers.add("Access-Control-Allow-Origin", "*")
+    response.headers.add("Access-Control-Allow-Headers", "*")
+    response.headers.add("Access-Control-Allow-Methods", "*")
+    return response
+
+
 bot = commands.Bot(command_prefix=commands.when_mentioned)
 
 osAssetUrl = "https://opensea.io/assets/0x753f10598c026e73182ca74ed33de05974b9f083/"
 caArtUrl = "https://www.champions.io/pets/nfts/art/"
+website = "https://ca-page-81b2e.web.app/"
 
 f = open("collection.json", "r")
 all_pets = json.loads(f.read())
@@ -37,6 +87,11 @@ async def on_ready():
 @bot.slash_command()
 async def pet(inter):
     pass
+
+
+@pet.sub_command(description="Prints Website URL", name="website")
+async def get_website(inter):
+    await inter.response.send_message(website)
 
 
 @pet.sub_command(description="Registered a pet as being offered for trade")
@@ -140,6 +195,25 @@ async def search(inter, family: Family, house_banner: House_Banner,
 @pet.sub_command(description="Register a need for a certain pet Type")
 async def need(inter, family: Family, house_banner: House_Banner,
                favorite_family: Favorite_Family):
+
+    search_results = db['needs']
+    search_results = list(
+        filter(lambda s: s['user_id'] == inter.user.id, search_results))
+
+    search_results = list(
+        filter(lambda s: s['Family'] == family, search_results))
+
+    search_results = list(
+        filter(lambda s: s['House Banner'] == house_banner, search_results))
+
+    search_results = list(
+        filter(lambda s: s['Favorite Family'] == favorite_family,
+               search_results))
+
+    if len(search_results) > 0:
+        return await inter.response.send_message(
+            "Such a need is already registered")
+
     need = {}
     need['user'] = str(inter.user)
     need['user_id'] = inter.user.id
@@ -154,7 +228,33 @@ async def need(inter, family: Family, house_banner: House_Banner,
 @remove.sub_command(description="Remove listed pet", name="need")
 async def remove_need(inter, family: Family, house_banner: House_Banner,
                       favorite_family: Favorite_Family):
-    return await inter.response.send_message("Not yet implemented")
+
+    search_results = db['needs']
+
+    search_results = list(
+        filter(lambda s: s['user_id'] == inter.user.id, search_results))
+
+    search_results = list(
+        filter(lambda s: s['Family'] == family, search_results))
+
+    search_results = list(
+        filter(lambda s: s['House Banner'] == house_banner, search_results))
+
+    search_results = list(
+        filter(lambda s: s['Favorite Family'] == favorite_family,
+               search_results))
+
+    if len(search_results) == 0:
+        return await inter.response.send_message("No such need found")
+
+    result = ""
+    for need in search_results:
+        db['needs'].remove(need)
+        result += "Need for " + need['House Banner'][0] + need[
+            'Favorite Family'] + " " + need['Family'] + " (" + need[
+                'user'] + ") removed\n"
+
+    await inter.response.send_message(result)
 
 
 @pet.sub_command(description="Show values of pet with given ID")

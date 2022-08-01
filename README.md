@@ -22,3 +22,6 @@ Sends a query against the database and returns pets that fit the query
 
 ### /pet show
 Shows the attributes of the pet with the given id
+
+### /pet website
+Prints the URL of the website to go along with this bot
