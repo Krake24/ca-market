@@ -27,4 +27,4 @@ Shows the attributes of the pet with the given id
 Prints the URL of the website to go along with this bot
 
 ## Website
-To show the current entries in the market you can also use the [website] (https://ca-page-81b2e.web.app/)
+To show the current entries in the market you can also use the [website](https://ca-page-81b2e.web.app)
