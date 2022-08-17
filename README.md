@@ -28,7 +28,7 @@ Prints the URL of the website to go along with this bot
 
 ## Discord
 In case you don't currently have access to a discord using this bot, you can use this invite link:
-[Discord Invite] (https://discord.gg/JX67FXCaYK)
+[Discord Invite](https://discord.gg/JX67FXCaYK)
 
 ## Website
 To show the current entries in the market you can also use the [website](https://ca-page-81b2e.web.app)
