@@ -5,7 +5,9 @@ import threading
 from disnake.ext import commands
 from replit import db
 from flask import Flask
-
+from functools import wraps
+from flask import request, abort
+import requests
 
 def convertOfferKeys(old):
     return {
@@ -34,21 +36,49 @@ def convertNeedKeys(old):
 app = Flask(__name__)
 
 
+def read_user(view_function):
+    @wraps(view_function)
+    async def decorated_function(*args, **kwargs):
+        state = request.headers.get('state')
+        if not state:
+            abort(400, "no state given")
+        try:
+          user_info = requests.get("https://discord-auth.krake24.repl.co/me?state=" + state).json()
+        except:
+            abort(401, "Unauthorized")
+        user = user_info['username'] + '#' + user_info['discriminator']
+        user_id = user_info['id']
+        return await view_function(user_id=user_id, user=user, *args, **kwargs)
+
+    return decorated_function
+
+
 @app.route('/')
-def main():
+async def main():
     return 'alive'
 
 
 @app.route('/offers')
-def get_offers():
+async def get_offers():
     result = []
     for offer in db['offers']:
         result.append(convertOfferKeys(dict(offer)))
     return json.dumps(result, ensure_ascii=False).encode('utf8')
 
 
+@app.route('/offers/<id>', methods=['POST', 'DELETE'])
+@read_user
+async def post_offer(id, user_id, user):
+    print(id)
+    if request.method == 'POST':
+        result = await offer_pet(int(user_id), user, int(id))
+    elif request.method == 'DELETE':
+        result = await remove_pet_offer(int(user_id), int(id))
+    return json.dumps(result, ensure_ascii=False).encode('utf8')
+
+
 @app.route('/needs')
-def get_needs():
+async def get_needs():
     result = []
     for need in db['needs']:
         result.append(convertNeedKeys(dict(need)))
@@ -96,27 +126,68 @@ async def get_website(inter):
 
 @pet.sub_command(description="Registered a pet as being offered for trade")
 async def offer(inter, id: commands.Range[1, 22238]):
+
+    user_id = inter.user.id
+    user = str(inter.user)
+
+    try:
+        message = await offer_pet(user_id, user, id)
+        await inter.response.send_message(message)
+    except Exception as e:
+        return await inter.response.send_message(str(e))
+
+
+async def offer_pet(user_id, user, id):
     if next(filter(lambda d: d['pet_id'] == id, db['offers']), False):
-        return await inter.response.send_message("Error: Pet with ID " +
-                                                 str(id) +
-                                                 " is already listed")
+        raise Exception("Error: Pet with ID " + str(id) + " is already listed")
 
     pet = next(filter(lambda p: p['id'] == id, all_pets))
 
     offer = {}
     offer['pet_id'] = id
-    offer['user'] = str(inter.user)
-    offer['user_id'] = inter.user.id
+    offer['user'] = user
+    offer['user_id'] = user_id
 
-    offer['Family'] = pet['Family']
-    offer['House Banner'] = pet['House Banner']
-    offer['Favorite Family'] = pet['Favorite Family']
+    family = pet['Family']
+    house_banner = pet['House Banner']
+    favorite_family = pet['Favorite Family']
+    offer['Family'] = family
+    offer['House Banner'] = house_banner
+    offer['Favorite Family'] = favorite_family
     offer['Personality'] = pet['Personality']
     offer['Favorite Toy'] = pet['Favorite Toy']
     offer['Favorite Food'] = pet['Favorite Food']
 
     db['offers'].append(offer)
-    await inter.response.send_message("Pet with ID " + str(id) + " registered")
+
+    search_results = db['needs']
+    search_results = list(
+        filter(lambda s: s['user_id'] != user_id, search_results))
+
+    search_results = list(
+        filter(lambda s: s['Family'] == family or s['Family'] == 'Any',
+               search_results))
+
+    search_results = list(
+        filter(
+            lambda s: s['House Banner'] == house_banner or s['House Banner'] ==
+            'Any', search_results))
+
+    search_results = list(
+        filter(
+            lambda s: s['Favorite Family'] == favorite_family or s[
+                'Favorite Family'] == 'Any', search_results))
+
+    distinct_users = set()
+    for result in search_results:
+        distinct_users.add(result['user'])
+
+    message = "Pet with ID " + str(id) + " registered."
+    if distinct_users:
+        message = "\nThese users have a fitting need registered:\n"
+        for user in distinct_users:
+            message += user + "\n"
+    return message
 
 
 @pet.sub_command_group()
@@ -126,18 +197,19 @@ async def remove(inter):
 
 @remove.sub_command(description="Remove listed pet", name="offer")
 async def remove_offer(inter, id: commands.Range[1, 22238]):
-    offer = next(filter(lambda d: d['pet_id'] == id, db['offers']), False)
+    message = await remove_pet_offer(inter.user.id, id)
+    return await inter.response.send_message(message)
+
+
+async def remove_pet_offer(user_id, pet_id):
+    offer = next(filter(lambda d: d['pet_id'] == pet_id, db['offers']), False)
     if not offer:
-        return await inter.response.send_message("Error: Pet with ID " +
-                                                 str(id) + " is not listed")
-    if not inter.user.id == offer['user_id']:
-        return await inter.response.send_message("Error: Pet with ID " +
-                                                 str(id) + " was listed by " +
-                                                 offer['user'] +
-                                                 ". You can't remove it.")
+        return ("Error: Pet with ID " + str(pet_id) + " is not listed")
+    if not user_id == offer['user_id']:
+        return "Error: Pet with ID " + str(
+            pet_id) + " was listed by " + offer['user'] + ". You can't remove it."
     db['offers'].remove(offer)
-    return await inter.response.send_message("Pet with ID " + str(id) +
-                                             " has been removed")
+    return "Pet with ID " + str(pet_id) + " has been removed"
 
 
 Family = commands.option_enum(
@@ -158,10 +230,22 @@ House_Banner = commands.option_enum([
 ])
 
 
-@pet.sub_command(description="Search all offered Pets")
+@pet.sub_command(description="Search all offered Pets excluding your own")
 async def search(inter, family: Family, house_banner: House_Banner,
                  favorite_family: Favorite_Family):
+
+    await inter.response.send_message(await search_pet(inter.user.id, family,
+                                                       house_banner,
+                                                       favorite_family))
+
+
+async def search_pet(user_id, family, house_banner, favorite_family):
+
     search_results = db['offers']
+
+    ## Search matching offers from others only
+    search_results = list(
+        filter(lambda s: s['user_id'] != user_id, search_results))
 
     if family != 'Any':
         search_results = list(
@@ -178,18 +262,17 @@ async def search(inter, family: Family, house_banner: House_Banner,
                    search_results))
 
     if len(search_results) == 0:
-        return await inter.response.send_message("No pets found")
+        return "No matching pets found"
 
     if len(search_results) > 30:
-        return await inter.response.send_message(
-            "More than 30 hits. Please narrow your search.")
+        return "More than 30 pets found."
     result = ""
     for pet in search_results:
         result += str(
             pet['pet_id']
         ) + " " + pet['House Banner'][0] + pet['Favorite Family'] + " " + pet[
             'Family'] + " (" + pet['user'] + ")\n"
-    await inter.response.send_message(result)
+    return result
 
 
 @pet.sub_command(description="Register a need for a certain pet Type")
@@ -221,8 +304,11 @@ async def need(inter, family: Family, house_banner: House_Banner,
     need['Family'] = family
     need['House Banner'] = house_banner
     need['Favorite Family'] = favorite_family
+
     db['needs'].append(need)
-    await inter.response.send_message("Need registered")
+    search_result = await search_pet(inter, family, house_banner,
+                                     favorite_family)
+    await inter.response.send_message("Need registered\n" + search_result)
 
 
 @remove.sub_command(description="Remove listed pet", name="need")
@@ -290,4 +376,8 @@ async def show(inter, id: commands.Range[1, 22238]):
 if __name__ == "__main__":
     threading.Thread(target=lambda: app.run(
         host='0.0.0.0', port=5000, debug=True, use_reloader=False)).start()
-bot.run(os.environ['botToken'])
+try:
+    bot.run(os.environ['botToken'])
+except disnake.errors.HTTPException as e:
+    print(e.response)
+    print(e)
