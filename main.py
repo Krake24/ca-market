@@ -8,6 +8,16 @@ from functools import wraps
 from flask import request, abort, Flask
 import requests
 
+bot = commands.Bot(command_prefix=commands.when_mentioned)
+
+osAssetUrl = "https://opensea.io/assets/0x753f10598c026e73182ca74ed33de05974b9f083/"
+caArtUrl = "https://www.champions.io/pets/nfts/art/"
+website = "https://ca-page-81b2e.web.app/"
+
+f = open("collection.json", "r")
+all_pets = json.loads(f.read())
+
+
 def convertOfferKeys(old):
     return {
         "pet_id": old['pet_id'],
@@ -45,6 +55,8 @@ def read_user(view_function):
           user_info = requests.get("https://discord-auth.krake24.repl.co/me?state=" + state).json()
         except:
             abort(401, "Unauthorized")
+        if not user_info:
+            abort(401, "Unauthorized")
         user = user_info['username'] + '#' + user_info['discriminator']
         return await view_function(user_id = user_info['id'], user=user, *args, **kwargs)
 
@@ -67,15 +79,12 @@ async def get_offers():
 @app.route('/offers/<id>', methods=['POST', 'DELETE'])
 @read_user
 async def post_offer(id, user_id, user):
-    print("deleting offer" + str(id))
+    print(request.method + " offer " + str(id))
   
     if request.method == 'POST':
-        message = await offer_pet(int(user_id), user, int(id))
+        result = await offer_pet(int(user_id), user, int(id))
     elif request.method == 'DELETE':
-        message = await remove_pet_offer(int(user_id), int(id))
-    result = {}
-    result['message'] = message
-    result['id'] = id
+        result = await remove_pet_offer(int(user_id), int(id))
     return json.dumps(result, ensure_ascii=False).encode('utf8')
 
 @app.route('/needs', methods=['GET'])
@@ -96,11 +105,9 @@ async def post_needs(user_id, user):
     favorite_family = need['favorite_family']
     
     if request.method == 'POST':
-        message = await need_pet(user_id, user, family, house_banner, favorite_family)
+        result = await need_pet(user_id, user, family, house_banner, favorite_family)        
     elif request.method == 'DELETE':
-        message = await remove_pet_need(user_id, family, house_banner, favorite_family)
-    result = {}
-    result['message'] = message
+        result = await remove_pet_need(user_id, family, house_banner, favorite_family)
     return json.dumps(result, ensure_ascii=False).encode('utf8')
 
 
@@ -110,16 +117,6 @@ def apply_caching(response):
     response.headers.add("Access-Control-Allow-Headers", "*")
     response.headers.add("Access-Control-Allow-Methods", "*")
     return response
-
-
-bot = commands.Bot(command_prefix=commands.when_mentioned)
-
-osAssetUrl = "https://opensea.io/assets/0x753f10598c026e73182ca74ed33de05974b9f083/"
-caArtUrl = "https://www.champions.io/pets/nfts/art/"
-website = "https://ca-page-81b2e.web.app/"
-
-f = open("collection.json", "r")
-all_pets = json.loads(f.read())
 
 if 'offers' not in db:
     db['offers'] = []
@@ -150,18 +147,12 @@ async def offer(inter, id: commands.Range[1, 22238]):
     user = str(inter.user)
 
     try:
-        message = await offer_pet(user_id, user, id)
-        await inter.response.send_message(message)
+        result = await offer_pet(user_id, user, id)
+        await inter.response.send_message(result['message'])
     except Exception as e:
         return await inter.response.send_message(str(e))
 
-
-async def offer_pet(user_id, user, id):
-    if next(filter(lambda d: d['pet_id'] == id, db['offers']), False):
-        raise Exception("Error: Pet with ID " + str(id) + " is already listed")
-
-    pet = next(filter(lambda p: p['id'] == id, all_pets))
-
+async def map_to_offer(id, user, user_id, pet):
     offer = {}
     offer['pet_id'] = id
     offer['user'] = user
@@ -176,13 +167,26 @@ async def offer_pet(user_id, user, id):
     offer['Personality'] = pet['Personality']
     offer['Favorite Toy'] = pet['Favorite Toy']
     offer['Favorite Food'] = pet['Favorite Food']
+    return offer
+
+async def offer_pet(user_id, user, id):
+    result = {}
+    if next(filter(lambda d: d['pet_id'] == id, db['offers']), False):
+        raise Exception("Error: Pet with ID " + str(id) + " is already listed")
+
+    pet = next(filter(lambda p: p['id'] == id, all_pets))
+
+    offer = await map_to_offer(id, user, user_id, pet)
 
     db['offers'].append(offer)
 
     search_results = db['needs']
     search_results = list(
         filter(lambda s: s['user_id'] != user_id, search_results))
-
+    
+    family = pet['Family']
+    house_banner = pet['House Banner']
+    favorite_family = pet['Favorite Family']
     search_results = list(
         filter(lambda s: s['Family'] == family or s['Family'] == 'Any',
                search_results))
@@ -206,7 +210,10 @@ async def offer_pet(user_id, user, id):
         message = "\nThese users have a fitting need registered:\n"
         for user in distinct_users:
             message += user + "\n"
-    return message
+    result['message'] = message
+    result['offer'] = pet
+    result['id'] = id
+    return result
 
 
 @pet.sub_command_group()
@@ -302,9 +309,10 @@ async def need(inter, family: Family, house_banner: House_Banner,
     user = str(inter.user)
                  
     result = await need_pet(user_id, user, family, house_banner, favorite_family)
-    await inter.response.send_message(result)
+    await inter.response.send_message(result['message'])
 
 async def need_pet(user_id, user, family, house_banner, favorite_family):
+    result = {}
     search_results = db['needs']
     search_results = list(
         filter(lambda s: s['user_id'] == user_id, search_results))
@@ -320,7 +328,8 @@ async def need_pet(user_id, user, family, house_banner, favorite_family):
                search_results))
 
     if len(search_results) > 0:
-        return "Such a need is already registered"
+        result['message'] =  "Such a need is already registered"
+        return result
 
     need = {}
     need['user'] = user
@@ -332,7 +341,9 @@ async def need_pet(user_id, user, family, house_banner, favorite_family):
 
     db['needs'].append(need)
     search_result = await search_pet(user_id, family, house_banner,                              favorite_family)
-    return "Need registered\n" + search_result
+    result['need'] = need
+    result['message'] = "Need registered\n" + search_result
+    return result
 
 
 @remove.sub_command(description="Remove listed pet", name="need")
