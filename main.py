@@ -12,17 +12,30 @@ bot = commands.Bot(command_prefix=commands.when_mentioned)
 
 osAssetUrl = "https://opensea.io/assets/0x753f10598c026e73182ca74ed33de05974b9f083/"
 caArtUrl = "https://www.champions.io/pets/nfts/art/"
-website = "https://ca-page-81b2e.web.app/"
+website = "https://prime-utils.web.app/"
 
 f = open("collection.json", "r")
 all_pets = json.loads(f.read())
 
 
-def convertOfferKeys(old):
+def convertOfferKeysFromDb(old):
     return {
         "pet_id": old['pet_id'],
         "user": old['user'],
         "user_id": old['user_id'],
+        "family": old['Family'],
+        "house_banner": old['House Banner'],
+        "favorite_family": old['Favorite Family'],
+        "personality": old['Personality'],
+        "favorite_toy": old['Favorite Toy'],
+        "favorite_food": old['Favorite Food']
+    }
+
+def convertOfferKeysFromCollection(old, user, user_id):
+    return {
+        "pet_id": old['id'],
+        "user": user,
+        "user_id": user_id,
         "family": old['Family'],
         "house_banner": old['House Banner'],
         "favorite_family": old['Favorite Family'],
@@ -72,7 +85,7 @@ async def main():
 async def get_offers():
     result = []
     for offer in db['offers']:
-        result.append(convertOfferKeys(dict(offer)))
+        result.append(convertOfferKeysFromDb(dict(offer)))
     return json.dumps(result, ensure_ascii=False).encode('utf8')
 
 
@@ -98,7 +111,7 @@ async def get_needs():
 @app.route('/needs', methods=['POST', 'DELETE'])
 @read_user
 async def post_needs(user_id, user):
-    result = "Method not found"
+    print(request.method + " need " + str(id))
     need = json.loads(request.data.decode('utf-8'))
     family = need['family']
     house_banner = need['house_banner']
@@ -211,8 +224,7 @@ async def offer_pet(user_id, user, id):
         for user in distinct_users:
             message += user + "\n"
     result['message'] = message
-    result['offer'] = pet
-    result['id'] = id
+    result['offer'] = convertOfferKeysFromCollection(pet, user, user_id)
     return result
 
 
@@ -223,19 +235,22 @@ async def remove(inter):
 
 @remove.sub_command(description="Remove listed pet", name="offer")
 async def remove_offer(inter, id: commands.Range[1, 22238]):
-    message = await remove_pet_offer(inter.user.id, id)
-    return await inter.response.send_message(message)
+    result = await remove_pet_offer(inter.user.id, id)
+    return await inter.response.send_message(result['message'])
 
 
 async def remove_pet_offer(user_id, pet_id):
+    result = {}
     offer = next(filter(lambda d: d['pet_id'] == pet_id, db['offers']), False)
     if not offer:
-        return ("Error: Pet with ID " + str(pet_id) + " is not listed")
+        raise Exception("Error: Pet with ID " + str(pet_id) + " is not listed")
     if not user_id == offer['user_id']:
-        return "Error: Pet with ID " + str(
-            pet_id) + " was listed by " + offer['user'] + ". You can't remove it."
+        raise Exception("Error: Pet with ID " + str(
+            pet_id) + " was listed by " + offer['user'] + ". You can't remove it.")
     db['offers'].remove(offer)
-    return "Pet with ID " + str(pet_id) + " has been removed"
+    result['message'] = "Pet with ID " + str(pet_id) + " has been removed"
+    result['offer'] = convertOfferKeysFromDb(dict(offer))
+    return result
 
 
 Family = commands.option_enum(
@@ -341,7 +356,7 @@ async def need_pet(user_id, user, family, house_banner, favorite_family):
 
     db['needs'].append(need)
     search_result = await search_pet(user_id, family, house_banner,                              favorite_family)
-    result['need'] = need
+    result['need'] = convertNeedKeys(need)
     result['message'] = "Need registered\n" + search_result
     return result
 

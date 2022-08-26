@@ -31,4 +31,4 @@ In case you don't currently have access to a discord using this bot, you can use
 [Discord Invite](https://discord.gg/JX67FXCaYK)
 
 ## Website
-To show the current entries in the market you can also use the [website](https://ca-page-81b2e.web.app)
+To show the current entries in the market you can also use the [website](https://prime-utils.web.app)
