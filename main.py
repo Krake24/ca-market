@@ -20,7 +20,6 @@ all_pets = json.loads(f.read())
 
 def convertOfferKeysFromDb(old):
     return {
-        some change
         "pet_id": old['pet_id'],
         "user": old['user'],
         "user_id": old['user_id'],
