@@ -7,6 +7,8 @@ from sqlitedict import SqliteDict
 f = open("collection.json", "r")
 all_pets = json.loads(f.read())
 
+db = SqliteDict("petmarket.sqlite")
+
 def convertOfferKeysFromDb(old):
     return {
         "pet_id": old['pet_id'],
@@ -46,7 +48,7 @@ def convertNeedKeys(old):
 
 def read_user(view_function):
     @wraps(view_function)
-    async def decorated_function(*args, **kwargs):
+    def decorated_function(*args, **kwargs):
         state = request.headers.get('state')
         if not state:
             abort(400, "no state given")
@@ -57,14 +59,14 @@ def read_user(view_function):
         if not user_info:
             abort(401, "Unauthorized")
         user = user_info['username'] + '#' + user_info['discriminator']
-        return await view_function(user_id = user_info['id'], user=user, *args, **kwargs)
+        return view_function(user_id = user_info['id'], user=user, *args, **kwargs)
 
     return decorated_function
 
 app = Flask(__name__)
 
 @app.route('/petmarket/offers')
-async def get_offers():
+def get_offers():
     result = []
     for offer in db['offers']:
         result.append(convertOfferKeysFromDb(dict(offer)))
@@ -73,17 +75,17 @@ async def get_offers():
 
 @app.route('/petmarket/offers/<id>', methods=['POST', 'DELETE'])
 @read_user
-async def post_offer(id, user_id, user):
+def post_offer(id, user_id, user):
     print(request.method + " offer " + str(id))
   
     if request.method == 'POST':
-        result = await offer_pet(int(user_id), user, int(id))
+        result = offer_pet(int(user_id), user, int(id))
     elif request.method == 'DELETE':
-        result = await remove_pet_offer(int(user_id), int(id))
+        result = remove_pet_offer(int(user_id), int(id))
     return json.dumps(result, ensure_ascii=False).encode('utf8')
 
 @app.route('/petmarket/needs', methods=['GET'])
-async def get_needs():
+def get_needs():
     result = []
     for need in db['needs']:
         result.append(convertNeedKeys(dict(need)))
@@ -92,7 +94,7 @@ async def get_needs():
 
 @app.route('/petmarket/needs', methods=['POST', 'DELETE'])
 @read_user
-async def post_needs(user_id, user):
+def post_needs(user_id, user):
     print(request.method + " need " + str(id))
     need = json.loads(request.data.decode('utf-8'))
     family = need['family']
@@ -100,9 +102,9 @@ async def post_needs(user_id, user):
     favorite_family = need['favorite_family']
     
     if request.method == 'POST':
-        result = await need_pet(user_id, user, family, house_banner, favorite_family)        
+        result = need_pet(user_id, user, family, house_banner, favorite_family)        
     elif request.method == 'DELETE':
-        result = await remove_pet_need(user_id, family, house_banner, favorite_family)
+        result = remove_pet_need(user_id, family, house_banner, favorite_family)
     return json.dumps(result, ensure_ascii=False).encode('utf8')
 
 
@@ -120,7 +122,7 @@ if 'needs' not in db:
     db['needs'] = []
 
 
-async def map_to_offer(id, user, user_id, pet):
+def map_to_offer(id, user, user_id, pet):
     offer = {}
     offer['pet_id'] = id
     offer['user'] = user
@@ -137,14 +139,14 @@ async def map_to_offer(id, user, user_id, pet):
     offer['Favorite Food'] = pet['Favorite Food']
     return offer
 
-async def offer_pet(user_id, user, id):
+def offer_pet(user_id, user, id):
     result = {}
     if next(filter(lambda d: d['pet_id'] == id, db['offers']), False):
         raise Exception("Error: Pet with ID " + str(id) + " is already listed")
 
     pet = next(filter(lambda p: p['id'] == id, all_pets))
 
-    offer = await map_to_offer(id, user, user_id, pet)
+    offer = map_to_offer(id, user, user_id, pet)
 
     db['offers'].append(offer)
 
@@ -182,19 +184,7 @@ async def offer_pet(user_id, user, id):
     result['offer'] = convertOfferKeysFromCollection(pet, user, user_id)
     return result
 
-
-@pet.sub_command_group()
-async def remove(inter):
-    pass
-
-
-@remove.sub_command(description="Remove listed pet", name="offer")
-async def remove_offer(inter, id: commands.Range[1, 22238]):
-    result = await remove_pet_offer(inter.user.id, id)
-    return await inter.response.send_message(result['message'])
-
-
-async def remove_pet_offer(user_id, pet_id):
+def remove_pet_offer(user_id, pet_id):
     result = {}
     offer = next(filter(lambda d: d['pet_id'] == pet_id, db['offers']), False)
     if not offer:
@@ -208,7 +198,7 @@ async def remove_pet_offer(user_id, pet_id):
     return result
 
 
-async def search_pet(user_id, family, house_banner, favorite_family):
+def search_pet(user_id, family, house_banner, favorite_family):
 
     search_results = db['offers']
 
@@ -244,7 +234,7 @@ async def search_pet(user_id, family, house_banner, favorite_family):
     return result
 
 
-async def need_pet(user_id, user, family, house_banner, favorite_family):
+def need_pet(user_id, user, family, house_banner, favorite_family):
     result = {}
     search_results = db['needs']
     search_results = list(
@@ -273,13 +263,13 @@ async def need_pet(user_id, user, family, house_banner, favorite_family):
     need['Favorite Family'] = favorite_family
 
     db['needs'].append(need)
-    search_result = await search_pet(user_id, family, house_banner,                              favorite_family)
+    search_result = search_pet(user_id, family, house_banner,                              favorite_family)
     result['need'] = convertNeedKeys(need)
     result['message'] = "Need registered\n" + search_result
     return result
 
 
-async def remove_pet_need(user_id, family, house_banner, favorite_family):
+def remove_pet_need(user_id, family, house_banner, favorite_family):
     search_results = db['needs']
 
     search_results = list(
