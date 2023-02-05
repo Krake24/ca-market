@@ -1,13 +1,28 @@
 import json
+import requests
+import pickle
+import atexit
 from functools import wraps
 from flask import request, abort, Flask
-import requests
-from sqlitedict import SqliteDict
+
+with open ("db.pkl", "rb") as file:
+    db = pickle.load(file)
+
+def exit_handler():
+    with open ("db.pkl", "wb") as file:
+        pickle.dump(db, file)
+
+
+atexit.register(exit_handler)
+
+if 'offers' not in db:
+    db['offers'] = []
+
+if 'needs' not in db:
+    db['needs'] = []
 
 f = open("collection.json", "r")
 all_pets = json.loads(f.read())
-
-db = SqliteDict("petmarket.sqlite")
 
 def convertOfferKeysFromDb(old):
     return {
@@ -115,12 +130,6 @@ def apply_caching(response):
     response.headers.add("Access-Control-Allow-Methods", "*")
     return response
 
-if 'offers' not in db:
-    db['offers'] = []
-
-if 'needs' not in db:
-    db['needs'] = []
-
 
 def map_to_offer(id, user, user_id, pet):
     offer = {}
@@ -149,6 +158,7 @@ def offer_pet(user_id, user, id):
     offer = map_to_offer(id, user, user_id, pet)
 
     db['offers'].append(offer)
+    
 
     search_results = db['needs']
     search_results = list(
@@ -193,6 +203,7 @@ def remove_pet_offer(user_id, pet_id):
         raise Exception("Error: Pet with ID " + str(
             pet_id) + " was listed by " + offer['user'] + ". You can't remove it.")
     db['offers'].remove(offer)
+    
     result['message'] = "Pet with ID " + str(pet_id) + " has been removed"
     result['offer'] = convertOfferKeysFromDb(dict(offer))
     return result
@@ -263,6 +274,7 @@ def need_pet(user_id, user, family, house_banner, favorite_family):
     need['Favorite Family'] = favorite_family
 
     db['needs'].append(need)
+    
     search_result = search_pet(user_id, family, house_banner,                              favorite_family)
     result['need'] = convertNeedKeys(need)
     result['message'] = "Need registered\n" + search_result
@@ -291,6 +303,7 @@ def remove_pet_need(user_id, family, house_banner, favorite_family):
     result = ""
     for need in search_results:
         db['needs'].remove(need)
+        
         result += "Need for " + need['House Banner'] + " " + need[
             'Favorite Family'] + " " + need['Family'] + " (" + need[
                 'user'] + ") removed\n"
