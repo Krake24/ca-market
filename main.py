@@ -21,7 +21,7 @@ if 'offers' not in db:
 if 'needs' not in db:
     db['needs'] = []
 
-f = open("collection.json", "r")
+f = open("pets.json", "r")
 all_pets = json.loads(f.read())
 
 def convertOfferKeysFromDb(old):
@@ -150,10 +150,10 @@ def map_to_offer(id, user, user_id, pet):
 
 def offer_pet(user_id, user, id):
     result = {}
-    if next(filter(lambda d: d['pet_id'] == id, db['offers']), False):
+    if next(filter(lambda d: str(d['pet_id']) == str(id), db['offers']), False):
         raise Exception("Error: Pet with ID " + str(id) + " is already listed")
 
-    pet = next(filter(lambda p: p['id'] == id, all_pets))
+    pet = next(filter(lambda p: str(p['id']) == str(id), all_pets))
 
     offer = map_to_offer(id, user, user_id, pet)
 
