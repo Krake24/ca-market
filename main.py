@@ -68,7 +68,7 @@ def read_user(view_function):
         if not state:
             abort(400, "no state given")
         try:
-          user_info = requests.get("https://ot3d-bot-prod-d3bot-s29oax.mo4.mogenius.io/me?state=" + state).json()
+          user_info = requests.get("https://bot-3d-63kl6rwwsa-ew.a.run.app/me?state=" + state).json()
         except:
             abort(401, "Unauthorized")
         if not user_info:
